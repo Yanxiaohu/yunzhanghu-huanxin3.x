@@ -72,31 +72,80 @@ BOOL rp_classMethodSwizzle(Class aClass, SEL originalSelector, SEL swizzleSelect
 - (BOOL)rp_application:(UIApplication *)application
                openURL:(NSURL *)url
      sourceApplication:(NSString *)sourceApplication
-         annotation:(id)annotation {
+            annotation:(id)annotation {
     
     if ([url.host isEqualToString:@"safepay"]) {
         //  支付宝支付
         [[AlipaySDK defaultService] processOrderWithPaymentResult:url standbyCallback:^(NSDictionary *resultDic) {
             [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketAlipayNotifaction object:resultDic];
         }];
+        
+        [[AlipaySDK defaultService] processAuthResult:url standbyCallback:^(NSDictionary *resultDic) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketAliAuthNotifaction object:resultDic];
+        }];
+        
     }
+    
+#ifdef WeChatAvaliable
+    else if ([url.host isEqualToString:@"pay"]) {
+        //  微信支付
+        [WXApi handleOpenURL:url delegate:self];
+    }
+#endif
+    
     return [self rp_application:application
-                               openURL:url
-                     sourceApplication:sourceApplication
-                            annotation:annotation];;
+                        openURL:url
+              sourceApplication:sourceApplication
+                     annotation:annotation];;
 }
 
 // iOS9.0之后的API接口
 - (BOOL)rp_application:(UIApplication *)app
-            openURL:(NSURL *)url
-            options:(NSDictionary<NSString*, id> *)options
+               openURL:(NSURL *)url
+               options:(NSDictionary<NSString*, id> *)options
 {
+    
     if ([url.host isEqualToString:@"safepay"]) {
         //  支付宝支付
         [[AlipaySDK defaultService] processOrderWithPaymentResult:url standbyCallback:^(NSDictionary *resultDic) {
             [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketAlipayNotifaction object:resultDic];
         }];
+        
+        [[AlipaySDK defaultService] processAuthResult:url standbyCallback:^(NSDictionary *resultDic) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketAliAuthNotifaction object:resultDic];
+        }];
+        
     }
+    
+#ifdef WeChatAvaliable
+    else if ([url.host isEqualToString:@"pay"]) {
+        //  微信支付
+        [WXApi handleOpenURL:url delegate:self];
+    }
+#endif
+    
     return [self rp_application:app openURL:url options:options];
 }
+
+#ifdef WeChatAvaliable
+//  微信支付回调
+-(void)rp_onResp:(BaseResp*)resp{
+    
+    if ([resp isKindOfClass:[PayResp class]]){
+        PayResp*response=(PayResp*)resp;
+        switch(response.errCode){
+            case WXSuccess:
+                //  服务器端查询支付通知或查询API返回的结果再提示成功
+                [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketWechatPayNotifaction object:resp];
+                break;
+            default:
+                //  微信支付失败
+                [[NSNotificationCenter defaultCenter] postNotificationName:RedpacketCancelPayNotifaction object:nil];
+                break;
+        }
+    }
+}
+
+#endif
+
 @end
